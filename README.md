@@ -6,8 +6,9 @@ Discord や SNS に送る動画を、指定サイズ（10MB・20MB など）に�
 
 - 🎬 動画をドラッグ＆ドロップするだけ
 - 📏 10MB / 20MB / 25MB / 50MB のプリセット、または任意の MB を指定
-- 🖥️ 解像度（1080p〜360p）と FPS も調整できる
-- 🔒 全部ブラウザ内で処理するから、動画がサーバーに送信されることはない
+- 🖥️ 解像度（1080p〜720p など）と FPS も調整できる
+- 🔒 全部ブラウザ内（ffmpeg.wasm）で処理するから、動画がサーバーに送信されることはない
+- 🎞️ MP4（H.264）形式で出力
 
 ## 使い方
 
@@ -18,19 +19,20 @@ Discord や SNS に送る動画を、指定サイズ（10MB・20MB など）に�
 
 ## 技術
 
-- **Canvas API** で動画を描画して再エンコード
-- **MediaRecorder API** で WebM 形式に録画
+- **ffmpeg.wasm** — WebAssembly で動く ffmpeg。サーバーなしで動画を変換
 - 目標サイズからビットレートを逆算してサイズを狙う
+- ffmpeg-core はリポジトリ内で自前ホスト（外部CDNに依存しない）
 
-> 注意: ブラウザの MediaRecorder は主に **WebM** 形式を出力します。MP4 出力はブラウザ依存です。Discord は WebM も受け付けます。
+## 開発
 
-## ローカルで動かす（Node.js）
+Node.js が必要です。
 
 ```bash
-npx serve .
+npm install     # 依存をインストール
+npm run dev     # ローカル開発サーバー（http://localhost:5173）
+npm run build   # dist/ にビルド
+npm run preview # ビルド結果を確認
 ```
-
-ブラウザで `http://localhost:3000` を開きます。
 
 ## ライセンス
 

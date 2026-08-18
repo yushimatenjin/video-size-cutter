@@ -1,3 +1,6 @@
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
+
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
@@ -22,11 +25,12 @@ const resultVideo = $("#resultVideo");
 const downloadBtn = $("#downloadBtn");
 const againBtn = $("#againBtn");
 
+let ffmpeg = null;
+let ffmpegLoading = false;
 let sourceFile = null;
 let sourceUrl = null;
 let sourceVideo = null;
 let sourceMeta = null;
-let currentMime = "";
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -131,6 +135,42 @@ function resetAll() {
 resetBtn.addEventListener("click", resetAll);
 againBtn.addEventListener("click", resetAll);
 
+/* ---------- ffmpeg 読み込み ---------- */
+async function loadFFmpeg(onProgress) {
+  if (ffmpeg) return ffmpeg;
+  if (ffmpegLoading) {
+    while (ffmpegLoading) await new Promise((r) => setTimeout(r, 100));
+    return ffmpeg;
+  }
+  ffmpegLoading = true;
+  try {
+    const baseURL = import.meta.env.BASE_URL;
+    const coreURL = baseURL + "ffmpeg/ffmpeg-core.js";
+    const wasmURL = baseURL + "ffmpeg/ffmpeg-core.wasm";
+
+    onProgress("エンジン読み込み中…");
+
+    const newFFmpeg = new FFmpeg();
+    newFFmpeg.on("log", ({ message }) => {
+      console.log(message);
+    });
+    newFFmpeg.on("progress", ({ progress, time }) => {
+      if (typeof progress === "number") {
+        const pct = Math.round(progress * 100);
+        onProgress("圧縮中… " + pct + "%", formatDuration(time));
+      }
+    });
+    await newFFmpeg.load({
+      coreURL: await toBlobURL(coreURL, "text/javascript"),
+      wasmURL: await toBlobURL(wasmURL, "application/wasm"),
+    });
+    ffmpeg = newFFmpeg;
+    return ffmpeg;
+  } finally {
+    ffmpegLoading = false;
+  }
+}
+
 /* ---------- 圧縮 ---------- */
 startBtn.addEventListener("click", startCompress);
 
@@ -149,8 +189,8 @@ async function startCompress() {
   setProgress(0, "準備中…");
 
   try {
-    const blob = await compressVideo(targetBytes);
-    showResult(blob);
+    const result = await compressVideo(targetBytes);
+    showResult(result.blob, result.meta);
   } catch (err) {
     console.error(err);
     alert("圧縮に失敗しました: " + err.message);
@@ -184,7 +224,7 @@ function computeTargets(targetBytes) {
 
   // 目標サイズからビットレートを逆算（音声分を差し引き、安全マージン）
   const audioBitrate = 96 * 1024; // 96 kbps
-  const margin = 0.9;
+  const margin = 0.92;
   const videoBitrate = Math.max(
     100 * 1024,
     ((targetBytes * margin - audioBitrate * safeDuration) * 8) / safeDuration
@@ -193,105 +233,54 @@ function computeTargets(targetBytes) {
   return { outW, outH, fps, videoBitrate, audioBitrate };
 }
 
-function compressVideo(targetBytes) {
-  return new Promise((resolve, reject) => {
-    const { outW, outH, fps, videoBitrate, audioBitrate } = computeTargets(targetBytes);
+async function compressVideo(targetBytes) {
+  const { outW, outH, fps, videoBitrate } = computeTargets(targetBytes);
+  const ext = sourceFile.name.match(/\.([^.]+)$/)?.[1]?.toLowerCase() || "mp4";
 
-    const canvas = document.createElement("canvas");
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext("2d");
+  const f = await loadFFmpeg((pct, note) => setProgress(0, pct, note));
 
-    const stream = canvas.captureStream(fps);
+  const inputName = "input." + ext;
+  const outputName = "output.mp4";
 
-    // 音声を引き継ぐ
-    const audioTracks = sourceVideo.captureStream ? sourceVideo.captureStream().getAudioTracks() : [];
-    audioTracks.forEach((t) => stream.addTrack(t));
+  setProgress(0, "読み込み中…");
+  await f.writeFile(inputName, await fetchFile(sourceFile));
+  await f.deleteFile(outputName);
 
-    const mime = pickMime();
-    currentMime = mime;
-    const recorder = new MediaRecorder(stream, {
-      mimeType: mime,
-      videoBitsPerSecond: Math.round(videoBitrate),
-      audioBitsPerSecond: Math.round(audioBitrate),
-    });
-
-    const chunks = [];
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
-    };
-
-    recorder.onerror = (e) => reject(new Error("録画エラー: " + (e.error || "不明")));
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mime });
-      sourceVideo.pause();
-      sourceVideo.removeAttribute("src");
-      sourceVideo.load();
-      resolve(blob);
-    };
-
-    const totalFrames = Math.max(1, Math.round(sourceMeta.duration * fps));
-    let frame = 0;
-
-    const drawFrame = () => {
-      ctx.drawImage(sourceVideo, 0, 0, outW, outH);
-      frame++;
-      const pct = Math.min(100, (frame / totalFrames) * 100);
-      setProgress(
-        pct,
-        "圧縮中… " + Math.round(pct) + "%",
-        "解像度 " + outW + "×" + outH + " ・ " + fps + " fps"
-      );
-    };
-
-    sourceVideo.onseeked = () => {
-      drawFrame();
-      if (sourceVideo.currentTime < sourceMeta.duration - 0.05) {
-        sourceVideo.currentTime += 1 / fps;
-      } else {
-        recorder.stop();
-      }
-    };
-
-    sourceVideo.onerror = () => reject(new Error("動画の読み込みに失敗しました。"));
-
-    recorder.start();
-    sourceVideo.currentTime = 0;
-  });
-}
-
-function pickMime() {
-  const candidates = [
-    "video/mp4;codecs=avc1,mp4a",
-    "video/mp4",
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
+  const args = [
+    "-i", inputName,
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-crf", "23",
+    "-maxrate", String(Math.round(videoBitrate)),
+    "-bufsize", String(Math.round(videoBitrate * 2)),
+    "-c:a", "aac",
+    "-b:a", "96k",
+    "-r", String(fps),
+    "-vf", "scale=" + outW + ":" + outH,
+    "-movflags", "+faststart",
+    "-y",
+    outputName,
   ];
-  for (const c of candidates) {
-    if (MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return "";
+
+  await f.exec(args);
+
+  const data = await f.readFile(outputName);
+  const blob = new Blob([data.buffer], { type: "video/mp4" });
+  await f.deleteFile(inputName);
+  await f.deleteFile(outputName);
+
+  return { blob, meta: { outW, outH } };
 }
 
-function mimeToExt(mime) {
-  if (!mime) return "webm";
-  const base = mime.split(";")[0].trim();
-  if (base === "video/mp4") return "mp4";
-  if (base === "video/webm") return "webm";
-  return base.replace("video/", "");
-}
-
-function showResult(blob) {
-  const { duration, width, height } = sourceMeta;
+function showResult(blob, meta) {
   const ratio = blob.size / sourceFile.size;
   const savedPct = Math.max(0, Math.round((1 - ratio) * 100));
 
   resultStats.innerHTML =
     stat("元サイズ", formatBytes(sourceFile.size)) +
     stat("圧縮後", formatBytes(blob.size)) +
-    stat("削減", savedPct + "%");
+    stat("削減", savedPct + "%") +
+    stat("解像度", meta.outW + "×" + meta.outH);
 
   const url = URL.createObjectURL(blob);
   resultVideo.src = url;
@@ -308,6 +297,5 @@ function stat(label, value) {
 
 function makeOutputName(name) {
   const base = name.replace(/\.[^.]+$/, "");
-  const ext = mimeToExt(currentMime);
-  return base + "_compressed." + ext;
+  return base + "_compressed.mp4";
 }
