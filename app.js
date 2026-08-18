@@ -250,8 +250,16 @@ async function compressVideo(targetBytes) {
   const outputName = "output.mp4";
 
   setProgress(0, "読み込み中…");
-  await f.writeFile(inputName, await fetchFile(sourceFile));
-  await f.deleteFile(outputName);
+  try {
+    await f.writeFile(inputName, await fetchFile(sourceFile));
+  } catch (e) {
+    throw new Error("入力ファイルの書き込みに失敗しました（ファイルが大きすぎる可能性）: " + e.message);
+  }
+  try {
+    await f.deleteFile(outputName);
+  } catch (e) {
+    // 出力ファイルがまだ無いだけなので無視
+  }
 
   const args = [
     "-i", inputName,
@@ -274,7 +282,12 @@ async function compressVideo(targetBytes) {
     throw new Error("ffmpeg がエラーで終了しました（コード " + ret + "）。対応していない形式の可能性があります。");
   }
 
-  const data = await f.readFile(outputName);
+  let data;
+  try {
+    data = await f.readFile(outputName);
+  } catch (e) {
+    throw new Error("出力ファイルの読み取りに失敗しました: " + e.message);
+  }
   const blob = new Blob([data.buffer], { type: "video/mp4" });
   await f.deleteFile(inputName);
   await f.deleteFile(outputName);
