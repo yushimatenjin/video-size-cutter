@@ -27,6 +27,7 @@ const againBtn = $("#againBtn");
 
 let ffmpeg = null;
 let ffmpegLoading = false;
+let lastLogs = [];
 let sourceFile = null;
 let sourceUrl = null;
 let sourceVideo = null;
@@ -153,6 +154,8 @@ async function loadFFmpeg(onProgress) {
     const newFFmpeg = new FFmpeg();
     newFFmpeg.on("log", ({ message }) => {
       console.log(message);
+      lastLogs.push(message);
+      if (lastLogs.length > 200) lastLogs.shift();
     });
     newFFmpeg.on("progress", ({ progress, time }) => {
       if (typeof progress === "number") {
@@ -193,7 +196,11 @@ async function startCompress() {
     showResult(result.blob, result.meta);
   } catch (err) {
     console.error(err);
-    alert("圧縮に失敗しました: " + err.message);
+    const tail = lastLogs.slice(-15).join("\n");
+    alert(
+      "圧縮に失敗しました: " + err.message +
+      (tail ? "\n\n--- ffmpeg ログ ---\n" + tail : "")
+    );
     settingsCard.hidden = false;
     progressCard.hidden = true;
   } finally {
