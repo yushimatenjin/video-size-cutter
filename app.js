@@ -26,6 +26,7 @@ let sourceFile = null;
 let sourceUrl = null;
 let sourceVideo = null;
 let sourceMeta = null;
+let currentMime = "";
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -208,6 +209,7 @@ function compressVideo(targetBytes) {
     audioTracks.forEach((t) => stream.addTrack(t));
 
     const mime = pickMime();
+    currentMime = mime;
     const recorder = new MediaRecorder(stream, {
       mimeType: mime,
       videoBitsPerSecond: Math.round(videoBitrate),
@@ -261,15 +263,24 @@ function compressVideo(targetBytes) {
 
 function pickMime() {
   const candidates = [
+    "video/mp4;codecs=avc1,mp4a",
+    "video/mp4",
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
-    "video/mp4",
   ];
   for (const c of candidates) {
     if (MediaRecorder.isTypeSupported(c)) return c;
   }
   return "";
+}
+
+function mimeToExt(mime) {
+  if (!mime) return "webm";
+  const base = mime.split(";")[0].trim();
+  if (base === "video/mp4") return "mp4";
+  if (base === "video/webm") return "webm";
+  return base.replace("video/", "");
 }
 
 function showResult(blob) {
@@ -297,5 +308,6 @@ function stat(label, value) {
 
 function makeOutputName(name) {
   const base = name.replace(/\.[^.]+$/, "");
-  return base + "_compressed.webm";
+  const ext = mimeToExt(currentMime);
+  return base + "_compressed." + ext;
 }
