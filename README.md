@@ -1,13 +1,13 @@
 # ✂️ Video Size Cutter
 
-Discord や SNS に送る動画を、指定サイズ（10MB・20MB など）に抑えて保存できるブラウザ内完結の動画圧縮ツールです。
+Discord や SNS に送る動画を、指定サイズ（10MB・20MB など）に抑えて保存できる動画圧縮ツールです。
 
-## 特徴
+## なにができる？
 
-- 🎬 **ブラウザ内で完結** — 動画がサーバーに送信されることは一切ありません（プライバシー安全）
-- 📏 **目標サイズ指定** — 10MB / 20MB / 25MB / 50MB のプリセット、または任意の MB を指定
-- 🖥️ **解像度・FPS 調整** — 1080p / 720p / 480p / 360p とフレームレートを選択可能
-- ⚡ **サーバー不要** — GitHub Pages でそのまま公開・利用できます
+- 🎬 動画をドラッグ＆ドロップするだけ
+- 📏 10MB / 20MB / 25MB / 50MB のプリセット、または任意の MB を指定
+- 🖥️ 解像度（1080p〜360p）と FPS も調整できる
+- 🔒 全部ブラウザ内で処理するから、動画がサーバーに送信されることはない
 
 ## 使い方
 
@@ -18,29 +18,19 @@ Discord や SNS に送る動画を、指定サイズ（10MB・20MB など）に�
 
 ## 技術
 
-- **Canvas API** — 動画を描画して再エンコード
-- **MediaRecorder API** — WebM 形式で録画
-- 目標サイズからビットレートを逆算してサイズを狙います
+- **Canvas API** で動画を描画して再エンコード
+- **MediaRecorder API** で WebM 形式に録画
+- 目標サイズからビットレートを逆算してサイズを狙う
 
 > 注意: ブラウザの MediaRecorder は主に **WebM** 形式を出力します。MP4 出力はブラウザ依存です。Discord は WebM も受け付けます。
 
 ## ローカルで動かす（Node.js）
 
 ```bash
-# このフォルダで
 npx serve .
-# または
-npx http-server .
 ```
 
-ブラウザで `http://localhost:3000`（serve）または `http://localhost:8080`（http-server）を開きます。
-
-## GitHub Pages で公開
-
-1. このリポジトリを GitHub にプッシュ
-2. リポジトリの **Settings → Pages**
-3. Source を **Deploy from a branch**、ブランチを `main`、フォルダを `/ (root)` に設定
-4. 保存すると `https://<ユーザー名>.github.io/video-size-cutter/` で公開されます
+ブラウザで `http://localhost:3000` を開きます。
 
 ## ライセンス
 
