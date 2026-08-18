@@ -262,7 +262,10 @@ async function compressVideo(targetBytes) {
     outputName,
   ];
 
-  await f.exec(args);
+  const ret = await f.exec(args);
+  if (ret !== 0) {
+    throw new Error("ffmpeg がエラーで終了しました（コード " + ret + "）。対応していない形式の可能性があります。");
+  }
 
   const data = await f.readFile(outputName);
   const blob = new Blob([data.buffer], { type: "video/mp4" });
