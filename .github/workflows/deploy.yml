@@ -27,6 +27,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Copy ffmpeg-core into public/
+        run: |
+          mkdir -p public/ffmpeg
+          cp node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js public/ffmpeg/
+          cp node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm public/ffmpeg/
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
