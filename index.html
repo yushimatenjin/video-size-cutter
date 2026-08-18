@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Size Cutter - 動画サイズ圧縮</title>
+  <meta name="description" content="DiscordやSNSに送る動画を、指定サイズ（10MB・20MBなど）に抑えてブラウザ内で圧縮。動画は外部に送信されません。" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="logo">✂️ Video Size Cutter</h1>
+      <p class="tagline">Discord・SNSに送る動画を、指定サイズに抑えて保存</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- アップロード -->
+    <section class="card" id="uploadCard">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="video/*" hidden />
+        <div class="dropzone-inner">
+          <div class="dropzone-icon">🎬</div>
+          <p class="dropzone-title">動画をドラッグ＆ドロップ</p>
+          <p class="dropzone-sub">またはクリックして選択</p>
+          <p class="dropzone-hint">対応: MP4 / WebM / MOV など（ブラウザで再生できる形式）</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 設定 -->
+    <section class="card" id="settingsCard" hidden>
+      <h2 class="card-title">圧縮設定</h2>
+
+      <div class="file-info" id="fileInfo"></div>
+
+      <div class="field">
+        <label for="targetSize">目標サイズ</label>
+        <div class="size-presets" id="sizePresets">
+          <button type="button" class="preset" data-mb="10">10 MB</button>
+          <button type="button" class="preset" data-mb="20">20 MB</button>
+          <button type="button" class="preset" data-mb="25">25 MB</button>
+          <button type="button" class="preset" data-mb="50">50 MB</button>
+        </div>
+        <div class="size-custom">
+          <input type="number" id="targetSize" value="20" min="1" max="2000" step="1" />
+          <span>MB</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="resolution">解像度</label>
+        <select id="resolution">
+          <option value="auto">自動（元のまま）</option>
+          <option value="1920">1080p（1920px）</option>
+          <option value="1280">720p（1280px）</option>
+          <option value="854">480p（854px）</option>
+          <option value="640">360p（640px）</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fps">フレームレート</label>
+        <select id="fps">
+          <option value="30">30 fps</option>
+          <option value="24">24 fps</option>
+          <option value="15">15 fps（より小さく）</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="startBtn">圧縮を開始</button>
+        <button type="button" class="btn btn-ghost" id="resetBtn">別の動画を選ぶ</button>
+      </div>
+    </section>
+
+    <!-- 進捗 -->
+    <section class="card" id="progressCard" hidden>
+      <h2 class="card-title">圧縮中…</h2>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="progress-text" id="progressText">準備中…</p>
+      <p class="progress-note" id="progressNote"></p>
+    </section>
+
+    <!-- 結果 -->
+    <section class="card" id="resultCard" hidden>
+      <h2 class="card-title">✅ 完了</h2>
+      <div class="result-stats" id="resultStats"></div>
+      <div class="result-video">
+        <video id="resultVideo" controls></video>
+      </div>
+      <div class="actions">
+        <a class="btn btn-primary" id="downloadBtn" download>ダウンロード</a>
+        <button type="button" class="btn btn-ghost" id="againBtn">もう一度圧縮</button>
+      </div>
+    </section>
+
+    <section class="card note-card">
+      <h2 class="card-title">🔒 プライバシー</h2>
+      <p>このツールはすべての処理を<strong>あなたのブラウザ内</strong>で行います。動画がサーバーに送信されることは一切ありません。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Video Size Cutter — ブラウザ内で完結する動画サイズ圧縮ツール</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
