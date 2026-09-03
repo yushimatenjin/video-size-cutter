@@ -257,8 +257,8 @@ async function startCompress() {
     const tail = lastLogs.slice(-30).join("\n");
     alert(
       "圧縮に失敗しました: " + err.message +
-      "\n\nヒント: HDR・10bit 動画や特殊なコーデックの場合も自動変換しますが、" +
-      "それでも失敗する場合は解像度を下げる・FPSを下げる・目標サイズを大きくしてお試しください。" +
+      "\n\nヒント: AV1 などの特殊な形式は互換モードで自動変換しますが、" +
+      "それでも失敗する場合は MP4（H.264）に変換してから、解像度を下げる・FPSを下げる・目標サイズを大きくしてお試しください。" +
       (tail ? "\n\n--- ffmpeg ログ ---\n" + tail : "")
     );
     settingsCard.hidden = false;
@@ -319,6 +319,34 @@ function parseDurationFromLogs(logs) {
   return NaN;
 }
 
+/**
+ * ffmpeg で入力をプローブし、コーデックとデコード可否を調べる。
+ * 戻り値: { videoCodec, audioCodec, duration, decodeFailed }
+ */
+async function probeInput(f, inputName) {
+  const mark = lastLogs.length;
+  try {
+    await f.exec(["-i", inputName]);
+  } catch (e) {
+    // -i のみ（出力なし）は必ず非ゼロ終了するので無視
+  }
+  const logs = lastLogs.slice(mark);
+  const text = logs.join("\n");
+  const vm = text.match(/Stream #\d+:\d+[^:]*Video:\s*([a-z0-9]+)/i);
+  const am = text.match(/Stream #\d+:\d+[^:]*Audio:\s*([a-z0-9]+)/i);
+  const decodeFailed = /decoding for stream \d+ failed|Failed to get pixel format|Missing Sequence Header|Decoder .* failed|Invalid data found when processing input|Could not find codec parameters/i.test(text);
+  return {
+    videoCodec: (vm?.[1] || "").toLowerCase(),
+    audioCodec: (am?.[1] || "").toLowerCase(),
+    duration: parseDurationFromLogs(logs),
+    decodeFailed,
+  };
+}
+
+// ffmpeg.wasm 内蔵デコーダで扱えない（または極端に遅い）映像コーデック。
+// ブラウザ自体は再生できるため、後段の互換モード（再生→録画）で変換する。
+const INCOMPATIBLE_VIDEO_CODECS = new Set(["av1"]);
+
 async function compressVideo(targetBytes) {
   const { outW, outH } = computeOutputSize();
   const fps = parseInt(fpsSelect.value, 10) || 30;
@@ -342,17 +370,30 @@ async function compressVideo(targetBytes) {
     // 出力ファイルがまだ無いだけなので無視
   }
 
-  // ブラウザで duration が取れない動画向けに ffmpeg の probe で補完
+  // プローブでコーデックとデコード可否を確認する
+  setProgress(8, "動画形式を確認中…", "");
   let duration = sourceMeta.duration;
-  if (!isFinite(duration) || duration <= 0) {
-    try {
-      await f.exec(["-i", inputName]);
-    } catch (e) {
-      // -i のみ（出力なし）は必ず非ゼロ終了するので無視
-    }
-    duration = parseDurationFromLogs(lastLogs);
+  const probe = await probeInput(f, inputName);
+  if (isFinite(probe.duration) && probe.duration > 0) {
+    duration = probe.duration;
   }
+
+  // AV1 など wasm デコーダで扱えない形式は互換モード（ブラウザ再生→録画）へ
+  if (probe.decodeFailed || INCOMPATIBLE_VIDEO_CODECS.has(probe.videoCodec)) {
+    const label = probe.videoCodec ? probe.videoCodec.toUpperCase() : "不明な形式";
+    setProgress(10, "互換モードで変換中…（" + label + "）", "ブラウザ再生を録画しています");
+    return await captureFallback(f, targetBytes, outW, outH, fps, duration);
+  }
+
   const { videoBps } = bitrateForSize(targetBytes, duration);
+  const blob = await runEncode(f, inputName, outputName, { outW, outH, fps, videoBps });
+  try { await f.deleteFile(inputName); } catch (e) { /* 無視 */ }
+  try { await f.deleteFile(outputName); } catch (e) { /* 無視 */ }
+
+  return { blob, meta: { outW, outH } };
+}
+
+async function runEncode(f, inputName, outputName, { outW, outH, fps, videoBps }) {
 
   onEncodeProgress = (progress, time) => {
     if (typeof progress === "number" && isFinite(progress)) {
@@ -408,9 +449,210 @@ async function compressVideo(targetBytes) {
     const copy = data.slice().buffer;
     blob = new Blob([copy], { type: "video/mp4" });
   }
-  try { await f.deleteFile(inputName); } catch (e) { /* 無視 */ }
-  try { await f.deleteFile(outputName); } catch (e) { /* 無視 */ }
+  return blob;
+}
 
+/* ---------- 互換モード（ブラウザ再生→録画→MP4化） ----------
+ * ffmpeg.wasm のデコーダで扱えない形式（AV1 等）用。
+ * ブラウザが再生できる動画なら必ず変換できる。処理はすべてブラウザ内で完結する。
+ */
+function pickCaptureMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = [
+    'video/mp4;codecs="avc1.640028,mp4a.40.2"',
+    'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
+    "video/mp4",
+    'video/webm;codecs="h264,opus"',
+    'video/webm;codecs="h264"',
+    'video/webm;codecs="vp9,opus"',
+    "video/webm",
+  ];
+  for (const m of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    } catch (e) { /* 次の候補へ */ }
+  }
+  return "";
+}
+
+/** 自動再生がブロックされた場合にユーザーに再生を促すオーバーレイ */
+function waitForUserPlay(video) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;" +
+      "background:rgba(0,0,0,0.7);padding:24px;";
+    const box = document.createElement("div");
+    box.style.cssText =
+      "background:#fff;color:#222;border-radius:12px;padding:20px;max-width:480px;text-align:center;";
+    const msg = document.createElement("p");
+    msg.textContent = "互換モードの変換には動画の再生が必要です。下の再生ボタンを押してください。";
+    msg.style.margin = "0 0 12px";
+    const btn = document.createElement("button");
+    btn.textContent = "▶ 再生して変換を開始";
+    btn.style.cssText =
+      "font-size:16px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;" +
+      "background:#4f7cff;color:#fff;";
+    box.appendChild(msg);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const cleanup = () => overlay.remove();
+    btn.addEventListener("click", async () => {
+      try {
+        await video.play();
+      } catch (e) {
+        return; // まだブロック中ならオーバーレイを残す
+      }
+      cleanup();
+      resolve();
+    });
+    video.addEventListener("playing", () => { cleanup(); resolve(); }, { once: true });
+  });
+}
+
+async function captureFallback(f, targetBytes, outW, outH, fps, duration) {
+  if (!sourceUrl) throw new Error("元の動画が見つかりません。");
+  if (!HTMLCanvasElement.prototype.captureStream) {
+    throw new Error("このブラウザは互換モード録画に対応していません。MP4（H.264）に変換してからお試しください。");
+  }
+  const mime = pickCaptureMimeType();
+  if (!mime) {
+    throw new Error("このブラウザは互換モード録画に対応していません。MP4（H.264）に変換してからお試しください。");
+  }
+  const isMp4 = mime.includes("mp4");
+  const { videoBps } = bitrateForSize(targetBytes, duration);
+
+  const capVideo = document.createElement("video");
+  capVideo.src = sourceUrl;
+  capVideo.playsInline = true;
+  capVideo.preload = "auto";
+  capVideo.muted = false;
+  capVideo.volume = 1;
+  await new Promise((resolve, reject) => {
+    capVideo.onloadedmetadata = resolve;
+    capVideo.onerror = () => reject(new Error("互換モードで動画を開けませんでした。"));
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, outW, outH);
+
+  // 音声は WebAudio 経由で取り出す（スピーカーには出さず録画ストリームにだけ流す）
+  let audioCtx = null;
+  let dest = null;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      audioCtx = new AC();
+      const srcNode = audioCtx.createMediaElementSource(capVideo);
+      dest = audioCtx.createMediaStreamDestination();
+      srcNode.connect(dest);
+    }
+  } catch (e) {
+    audioCtx = null;
+    dest = null;
+  }
+
+  const tracks = [...canvas.captureStream(fps).getVideoTracks()];
+  if (dest && dest.stream.getAudioTracks().length > 0) {
+    tracks.push(...dest.stream.getAudioTracks());
+  }
+  const rec = new MediaRecorder(new MediaStream(tracks), {
+    mimeType: mime,
+    videoBitsPerSecond: videoBps,
+    audioBitsPerSecond: AUDIO_BPS,
+  });
+  const chunks = [];
+  rec.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+  const stopped = new Promise((resolve) => { rec.onstop = resolve; });
+
+  // 描画ループ（rVFC が無いブラウザ向けに rAF フォールバック）
+  let drawing = true;
+  const draw = () => {
+    if (!drawing) return;
+    try {
+      if (capVideo.readyState >= 2) ctx.drawImage(capVideo, 0, 0, outW, outH);
+    } catch (e) { /* 描画失敗は無視して次フレームへ */ }
+    if (capVideo.requestVideoFrameCallback) {
+      capVideo.requestVideoFrameCallback(draw);
+    } else {
+      requestAnimationFrame(draw);
+    }
+  };
+
+  const totalSec = isFinite(capVideo.duration) && capVideo.duration > 0
+    ? capVideo.duration
+    : (isFinite(duration) && duration > 0 ? duration : 0);
+  capVideo.addEventListener("timeupdate", () => {
+    if (totalSec > 0) {
+      const pct = Math.min(99, Math.round((capVideo.currentTime / totalSec) * 100));
+      setProgress(pct, "互換モードで変換中… " + pct + "%", "ブラウザ再生を録画しています（等倍速）");
+    }
+  });
+
+  let started = false;
+  capVideo.addEventListener("playing", () => {
+    draw();
+    if (!started) {
+      started = true;
+      try { rec.start(1000); } catch (e) { /* 開始失敗は stop 時に検出 */ }
+    }
+  });
+
+  try {
+    if (audioCtx && audioCtx.state === "suspended") {
+      try { await audioCtx.resume(); } catch (e) { /* ジェスチャ待ち */ }
+    }
+    try {
+      await capVideo.play();
+    } catch (e) {
+      await waitForUserPlay(capVideo); // 自動再生ブロック時はユーザー操作待ち
+      if (audioCtx && audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (err) { /* 音声なしで続行 */ }
+      }
+    }
+    await new Promise((resolve, reject) => {
+      capVideo.onended = resolve;
+      capVideo.onerror = () => reject(new Error("互換モードの再生中にエラーが発生しました。"));
+    });
+  } finally {
+    drawing = false;
+    try { if (rec.state !== "inactive") rec.stop(); } catch (e) { /* 無視 */ }
+    try { capVideo.pause(); } catch (e) { /* 無視 */ }
+    capVideo.removeAttribute("src");
+    capVideo.load();
+  }
+  await stopped;
+  if (audioCtx) { try { await audioCtx.close(); } catch (e) { /* 無視 */ } }
+
+  if (chunks.length === 0) {
+    throw new Error("互換モードの録画データが空でした。別の形式に変換してお試しください。");
+  }
+  const recorded = new Blob(chunks, { type: mime.split(";")[0] });
+
+  // MP4 で録画できて目標サイズ以下ならそのまま採用
+  if (isMp4 && recorded.size <= targetBytes) {
+    return { blob: recorded, meta: { outW, outH } };
+  }
+  // WebM 録画 or サイズ超過 → ffmpeg で MP4 化（H.264/VP9 はデコード可能）
+  const capInput = "capture." + (isMp4 ? "mp4" : "webm");
+  const capOutput = "capture-out.mp4";
+  try {
+    await f.writeFile(capInput, await fetchFile(recorded));
+  } catch (e) {
+    throw new Error("録画データの書き込みに失敗しました: " + e.message);
+  }
+  try { await f.deleteFile(capOutput); } catch (e) { /* 無視 */ }
+  const { videoBps: finalBps } = bitrateForSize(targetBytes, totalSec || duration);
+  const blob = await runEncode(f, capInput, capOutput, { outW, outH, fps, videoBps: finalBps });
+  try { await f.deleteFile(capInput); } catch (e) { /* 無視 */ }
+  try { await f.deleteFile(capOutput); } catch (e) { /* 無視 */ }
   return { blob, meta: { outW, outH } };
 }
 
