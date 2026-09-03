@@ -5,6 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-ffmpeg-core.mjs",
+    "setup:ffmpeg": "node scripts/copy-ffmpeg-core.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
