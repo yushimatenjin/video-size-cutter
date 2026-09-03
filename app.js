@@ -484,15 +484,16 @@ function waitForUserPlay(video) {
       "background:rgba(0,0,0,0.7);padding:24px;";
     const box = document.createElement("div");
     box.style.cssText =
-      "background:#fff;color:#222;border-radius:12px;padding:20px;max-width:480px;text-align:center;";
+      "background:#fff;color:#18181b;border-radius:10px;padding:24px;max-width:440px;text-align:center;" +
+      "font-size:14px;line-height:1.6;";
     const msg = document.createElement("p");
-    msg.textContent = "互換モードの変換には動画の再生が必要です。下の再生ボタンを押してください。";
-    msg.style.margin = "0 0 12px";
+    msg.textContent = "互換モードの変換には動画の再生が必要です。下のボタンを押してください。";
+    msg.style.margin = "0 0 16px";
     const btn = document.createElement("button");
-    btn.textContent = "▶ 再生して変換を開始";
+    btn.textContent = "再生して変換を開始";
     btn.style.cssText =
-      "font-size:16px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;" +
-      "background:#4f7cff;color:#fff;";
+      "font-size:14px;font-weight:600;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;" +
+      "background:#18181b;color:#fff;";
     box.appendChild(msg);
     box.appendChild(btn);
     overlay.appendChild(box);

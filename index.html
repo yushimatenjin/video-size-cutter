@@ -6,33 +6,46 @@
   <title>Video Size Cutter - 動画サイズ圧縮</title>
   <meta name="description" content="DiscordやSNSに送る動画を、指定サイズ（10MB・20MBなど）に抑えてブラウザ内で圧縮。動画は外部に送信されません。" />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2318181b'/%3E%3Cpath d='M20 22l12 12 12-12' stroke='white' stroke-width='5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20 34l12 12 12-12' stroke='white' stroke-width='5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
   <header class="site-header">
-    <div class="container">
-      <h1 class="logo">✂️ Video Size Cutter</h1>
-      <p class="tagline">Discord・SNSに送る動画を、指定サイズに抑えて保存</p>
+    <div class="container header-inner">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="26" height="26">
+          <rect width="64" height="64" rx="14" fill="#18181b"/>
+          <path d="M20 22l12 12 12-12" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 34l12 12 12-12" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <p class="brand-name">Video Size Cutter</p>
+        <p class="brand-sub">ブラウザ内で完結する動画サイズ圧縮ツール</p>
+      </div>
     </div>
   </header>
 
   <main class="container">
     <!-- アップロード -->
     <section class="card" id="uploadCard">
-      <div class="dropzone" id="dropzone">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="動画ファイルを選択">
         <input type="file" id="fileInput" accept="video/*" hidden />
-        <div class="dropzone-inner">
-          <div class="dropzone-icon">🎬</div>
-          <p class="dropzone-title">動画をドラッグ＆ドロップ</p>
-          <p class="dropzone-sub">またはクリックして選択</p>
-          <p class="dropzone-hint">対応: MP4 / WebM / MOV など（ブラウザで再生できる形式）</p>
-        </div>
+        <span class="dropzone-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4"/>
+            <path d="M7 9l5-5 5 5"/>
+            <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>
+          </svg>
+        </span>
+        <p class="dropzone-title">動画をドラッグ＆ドロップ</p>
+        <p class="dropzone-sub">またはクリックしてファイルを選択</p>
+        <p class="dropzone-hint">MP4 / WebM / MOV に対応（ブラウザで再生できる形式）</p>
       </div>
     </section>
 
     <!-- 設定 -->
     <section class="card" id="settingsCard" hidden>
-      <h2 class="card-title">圧縮設定</h2>
+      <h1 class="card-title">圧縮設定</h1>
 
       <div class="file-info" id="fileInfo"></div>
 
@@ -50,24 +63,26 @@
         </div>
       </div>
 
-      <div class="field">
-        <label for="resolution">解像度</label>
-        <select id="resolution">
-          <option value="auto">自動（元のまま）</option>
-          <option value="1920">1080p（1920px）</option>
-          <option value="1280">720p（1280px）</option>
-          <option value="854">480p（854px）</option>
-          <option value="640">360p（640px）</option>
-        </select>
-      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="resolution">解像度</label>
+          <select id="resolution">
+            <option value="auto">自動（元のまま）</option>
+            <option value="1920">1080p（1920px）</option>
+            <option value="1280">720p（1280px）</option>
+            <option value="854">480p（854px）</option>
+            <option value="640">360p（640px）</option>
+          </select>
+        </div>
 
-      <div class="field">
-        <label for="fps">フレームレート</label>
-        <select id="fps">
-          <option value="30">30 fps</option>
-          <option value="24">24 fps</option>
-          <option value="15">15 fps（より小さく）</option>
-        </select>
+        <div class="field">
+          <label for="fps">フレームレート</label>
+          <select id="fps">
+            <option value="30">30 fps</option>
+            <option value="24">24 fps</option>
+            <option value="15">15 fps（より小さく）</option>
+          </select>
+        </div>
       </div>
 
       <div class="actions">
@@ -78,20 +93,20 @@
 
     <!-- 進捗 -->
     <section class="card" id="progressCard" hidden>
-      <h2 class="card-title">圧縮中…</h2>
+      <h1 class="card-title">圧縮中</h1>
       <div class="progress-wrap">
         <div class="progress-bar" id="progressBar"></div>
       </div>
-      <p class="progress-text" id="progressText">準備中…</p>
+      <p class="progress-text" id="progressText">準備中</p>
       <p class="progress-note" id="progressNote"></p>
     </section>
 
     <!-- 結果 -->
     <section class="card" id="resultCard" hidden>
-      <h2 class="card-title">✅ 完了</h2>
+      <h1 class="card-title">完了</h1>
       <div class="result-stats" id="resultStats"></div>
       <div class="result-video">
-        <video id="resultVideo" controls></video>
+        <video id="resultVideo" controls playsinline></video>
       </div>
       <div class="actions">
         <a class="btn btn-primary" id="downloadBtn" download>ダウンロード</a>
@@ -99,15 +114,15 @@
       </div>
     </section>
 
-    <section class="card note-card">
-      <h2 class="card-title">🔒 プライバシー</h2>
-      <p>このツールはすべての処理を<strong>あなたのブラウザ内</strong>で行います。動画がサーバーに送信されることは一切ありません。</p>
+    <section class="note-card">
+      <p class="note-title">プライバシーについて</p>
+      <p>すべての処理はあなたのブラウザ内で行われます。動画がサーバーに送信されることはありません。</p>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <p>Video Size Cutter — ブラウザ内で完結する動画サイズ圧縮ツール</p>
+      <p>Video Size Cutter</p>
     </div>
   </footer>
 
